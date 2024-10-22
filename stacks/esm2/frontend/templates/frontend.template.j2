@@ -1,0 +1,29 @@
+services:
+  frontend:
+    image: "{{ DOCKER_REGISTRY_URL }}/{{ FRONT_IMAGE_NAME }}:{{ TAG_NAME }}"
+    ports:
+      - "8085:80"
+    expose:
+      - "8085"
+    networks:
+      - sm_network
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      placement:
+        constraints: [ ]
+
+networks:
+  sm_network:
+    external: true

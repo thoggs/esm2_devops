@@ -1,0 +1,21 @@
+---
+- import_playbook: docker-playbook.yml
+  tags: docker
+
+- import_playbook: db-playbook.yml
+  tags: db
+
+- import_playbook: backend-playbook.yml
+  tags: backend
+
+- import_playbook: frontend-playbook.yml
+  tags: frontend
+
+- import_playbook: monitoring-playbook.yml
+  tags: monitoring
+
+- import_playbook: populate-db-playbook.yml
+  tags: populate-db
+
+- import_playbook: check-stack-status.yml
+  tags: check-status

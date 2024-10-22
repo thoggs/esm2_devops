@@ -1,0 +1,46 @@
+- hosts: swarm_manager
+  become: yes
+
+  vars:
+    docker_host: "unix:///var/run/docker.sock"
+    db_service_name: "esm2_postgres"
+    backend_service_name: "esm2_backend"
+    sql_file_path: "/queries/resources.sql"
+
+  vars_files:
+    - ../env.yml
+
+  tasks:
+    - name: Wait for PostgreSQL service to be ready
+      command: "docker service ps {{ db_service_name }} --filter 'desired-state=running' -q"
+      register: task_id
+      changed_when: false
+
+    - name: Get the container ID for the backend service
+      command: docker ps --filter "name={{ backend_service_name }}" --format "{{'{{.ID}}'}}"
+      register: backend_container_id
+      changed_when: false
+
+    - name: Wait for the backend service to be healthy
+      shell: |
+           docker inspect --format '{{ "{{.State.Health.Status}}" }}' {{ backend_container_id.stdout }}
+      register: backend_health
+      retries: 20
+      delay: 10
+      until: backend_health.stdout.strip() == "healthy"
+      changed_when: false
+
+    - name: Get the container ID for the postgres service
+      command: docker ps --filter "name=esm2_postgres" --format "{{'{{.ID}}'}}"
+      register: container_id
+
+    - name: Create /queries directory in the container
+      command: docker exec {{ container_id.stdout }} mkdir -p /queries
+
+    - name: Copy SQL script to the container
+      command: docker cp ../stacks/esm2/db/queries/resources.sql {{ container_id.stdout }}:/queries/resources.sql
+
+    - name: Execute SQL script to populate the database
+      command: docker exec {{ container_id.stdout }} psql -U {{ POSTGRES_USER }} -d {{ POSTGRES_DB }} -f /queries/resources.sql
+      environment:
+        PGPASSWORD: "{{ POSTGRES_PASSWORD }}"
