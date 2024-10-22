@@ -1,0 +1,37 @@
+---
+- hosts: swarm_manager
+  become: yes
+
+  vars:
+    docker_host: "unix:///var/run/docker.sock"
+
+  vars_files:
+    - ../env.yml
+
+  pre_tasks:
+    - name: Update APT package index
+      ansible.builtin.apt:
+        update_cache: yes
+
+  tasks:
+    - name: Generate frontend Docker Swarm file (esm2)
+      template:
+        src: ../stacks/esm2/frontend/templates/frontend.template.j2
+        dest: ../stacks/esm2/frontend/docker-compose-frontend.yml
+
+    - name: Deploy the frontend stack (esm2)
+      community.docker.docker_stack:
+        name: esm2
+        state: present
+        with_registry_auth: yes
+        compose:
+          - ../stacks/esm2/frontend/docker-compose-frontend.yml
+
+#    - name: Verify that the frontend service is running
+#      command: docker stack ps esm2 --filter "name=esm2_frontend"
+#      register: frontend_result
+#      changed_when: false
+#
+#    - name: Show frontend service status
+#      debug:
+#        var: frontend_result.stdout_lines

@@ -1,0 +1,320 @@
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+    networks:
+      - monitoring_network
+    labels:
+      - "com.example.service=prometheus"
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "--tries=1", "--spider", "http://localhost:9090/-/healthy" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 500M
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    configs:
+      - source: loki_config
+        target: /etc/loki/local-config.yml
+    volumes:
+      - loki_data:/stacks/esm2/logging/loki
+    command:
+      - '-config.file=/etc/loki/local-config.yml'
+    networks:
+      - monitoring_network
+    labels:
+      - "com.example.service=loki"
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+
+  promtail:
+    image: grafana/promtail:latest
+    configs:
+      - source: promtail_config
+        target: /etc/promtail/config.yml
+    command:
+      - '-config.file=/etc/promtail/config.yml'
+    networks:
+      - monitoring_network
+    labels:
+      - "com.example.service=promtail"
+    deploy:
+      mode: global
+      update_config:
+        parallelism: 2
+        order: stop-first
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 256M
+
+  grafana:
+    image: grafana/grafana-enterprise:latest
+    ports:
+      - "3000:3000"
+    configs:
+      - source: grafana_ini
+        target: /etc/grafana/grafana.ini
+      - source: grafana_datasources
+        target: /etc/grafana/provisioning/datasources/datasources.yml
+    volumes:
+      - grafana_storage:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/GRAFANA_ADMIN_PASSWORD
+      - PROMETHEUS_URL_FILE=/run/secrets/PROMETHEUS_URL
+      - LOKI_URL_FILE=/run/secrets/LOKI_URL
+    secrets:
+      - GRAFANA_ADMIN_PASSWORD
+      - PROMETHEUS_URL
+      - LOKI_URL
+    networks:
+      - monitoring_network
+    labels:
+      - "com.example.service=grafana"
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+
+  opentelemetry:
+    image: otel/opentelemetry-collector-contrib:latest
+    configs:
+      - source: otel_config
+        target: /etc/otel-config.yml
+    command: [ "--config=/etc/otel-config.yml" ]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - monitoring_network
+    labels:
+      - "com.example.service=opentelemetry"
+    deploy:
+      mode: replicated
+      replicas: 1
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 512M
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    ports:
+      - "9443:9443"
+      - "8000:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - monitoring_network
+    labels:
+      - "com.example.service=portainer"
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 500M
+
+  blackbox_exporter:
+    image: prom/blackbox-exporter:latest
+    configs:
+      - source: blackbox_config
+        target: /config/blackbox.yml
+    command:
+      - '--config.file=/config/blackbox.yml'
+    ports:
+      - "9115:9115"
+    networks:
+      - monitoring_network
+    deploy:
+      mode: replicated
+      replicas: 1
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 50M
+
+  node_exporter:
+    image: prom/node-exporter:v1.8.2
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    deploy:
+      mode: global
+      update_config:
+        parallelism: 2
+        order: stop-first
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 128M
+    networks:
+      - monitoring_network
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.39.3
+    ports:
+      - "8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    deploy:
+      mode: global
+      update_config:
+        parallelism: 2
+        order: stop-first
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 128M
+    networks:
+      - monitoring_network
+
+networks:
+  monitoring_network:
+    driver: overlay
+    attachable: true
+
+volumes:
+  prometheus_data:
+  grafana_storage:
+  portainer_data:
+  loki_data:
+
+configs:
+  prometheus_config:
+    file: ./prometheus/prometheus.yml
+  loki_config:
+    file: ./loki/loki-config.yml
+  promtail_config:
+    file: ./promtail/promtail-config.yml
+  grafana_ini:
+    file: ./grafana/grafana.ini
+  grafana_datasources:
+    file: ./grafana/datasources.yml
+  otel_config:
+    file: ./opentelemetry/otel-config.yml
+  blackbox_config:
+    file: ./blackbox/blackbox.yml
+
+secrets:
+  GRAFANA_ADMIN_PASSWORD:
+    external: true
+  PROMETHEUS_URL:
+    external: true
+  LOKI_URL:
+    external: true
+  PROMETHEUS_USER:
+    external: true
+  PROMETHEUS_PASSWORD:
+    external: true
+  PROMETHEUS_API_HEALTH_CHECK_URL:
+    external: true

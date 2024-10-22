@@ -1,0 +1,101 @@
+---
+- hosts: swarm_manager
+  become: yes
+
+  vars:
+    docker_host: "unix:///var/run/docker.sock"
+
+  vars_files:
+    - ../env.yml
+
+  pre_tasks:
+    - name: Update APT package index
+      ansible.builtin.apt:
+        update_cache: yes
+
+  tasks:
+    - name: Purge Docker packages completely
+      ansible.builtin.command:
+        cmd: sudo apt purge docker-ce docker-ce-cli containerd.io docker-compose-plugin -y
+
+    - name: Remove Docker's storage directories
+      ansible.builtin.command:
+        cmd: sudo rm -rf /var/lib/docker /var/lib/containerd
+
+    - name: Install dependencies for Docker
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+
+    - name: Create the /etc/apt/keyrings directory (if necessary)
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Add Docker GPG key to /etc/apt/keyrings
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+
+    - name: Add Docker repository manually
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_facts['distribution_release'] }} stable"
+        filename: docker.list
+        update_cache: yes
+        state: present
+
+    - name: Install Docker
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+
+    - name: Ensure Docker service is started and enabled
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Set environment variable for Docker Host
+      ansible.builtin.set_fact:
+        DOCKER_HOST: "{{ docker_host }}"
+
+    - name: Add active user to the docker group
+      ansible.builtin.shell: "usermod -aG docker $USER"
+
+    - name: Log in to Azure Container Registry
+      community.docker.docker_login:
+        registry_url: "{{ DOCKER_REGISTRY_URL }}"
+        username: "{{ DOCKER_REGISTRY_USER }}"
+        password: "{{ DOCKER_REGISTRY_PASSWORD }}"
+
+    - name: Initialize Docker Swarm
+      community.docker.docker_swarm:
+        state: present
+        advertise_addr: "{{ HOST_IP }}"
+
+    - name: Create Docker Secrets
+      include_tasks: ../vars/secrets/create-secrets.yml
+
+    - name: Create Docker network for sm_network (if not exists)
+      community.docker.docker_network:
+        name: sm_network
+        state: present
+        driver: overlay
+        scope: swarm
+
+    #    - name: Create Docker network for monitoring_network (if not exists)
+#      community.docker.docker_network:
+#        name: monitoring_network
+#        driver: overlay
+#        state: present
+#        attachable: yes
+#        scope: swarm

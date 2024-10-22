@@ -1,0 +1,21 @@
+---
+- name: Verify stack services
+  hosts: swarm_manager
+  tasks:
+    - name: Verify that the esm2 stack is running
+      command: docker stack ps esm2
+      register: esm2_result
+      changed_when: false
+
+    - name: Show esm2 stack services status
+      debug:
+        var: esm2_result.stdout_lines
+
+    - name: Verify that the monitoring stack is running
+      command: docker stack ps monitoring
+      register: monitoring_result
+      changed_when: false
+
+    - name: Show monitoring stack services status
+      debug:
+        var: monitoring_result.stdout_lines

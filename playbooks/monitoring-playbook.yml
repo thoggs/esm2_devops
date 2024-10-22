@@ -1,0 +1,56 @@
+---
+- hosts: swarm_manager
+  become: yes
+
+  vars:
+    docker_host: "unix:///var/run/docker.sock"
+
+  vars_files:
+    - ../env.yml
+
+  pre_tasks:
+    - name: Update APT package index
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Generate Prometheus configuration file
+      template:
+        src: ../stacks/monitoring/prometheus/templates/prometheus.template.yml.j2
+        dest: ../stacks/monitoring/prometheus/prometheus.yml
+
+    - name: Generate Grafana datasources configuration file
+      template:
+        src: ../stacks/monitoring/grafana/templates/grafana-datasources.template.yml.j2
+        dest: ../stacks/monitoring/grafana/datasources.yml
+
+    - name: Create Prometheus data volume
+      community.docker.docker_volume:
+        name: prometheus_data
+        state: present
+
+    - name: Create Grafana storage volume
+      community.docker.docker_volume:
+        name: grafana_storage
+        state: present
+
+    - name: Create Portainer data volume
+      community.docker.docker_volume:
+        name: portainer_data
+        state: present
+
+  tasks:
+    - name: Deploy the Monitoring stack (monitoring)
+      community.docker.docker_stack:
+        name: monitoring
+        state: present
+        compose:
+          - ../stacks/monitoring/docker-compose-monitoring.yml
+
+#    - name: Verify that the monitoring stack is running
+#      command: docker stack ps monitoring
+#      register: monitoring_result
+#      changed_when: false
+#
+#    - name: Show monitoring stack services status
+#      debug:
+#        var: monitoring_result.stdout_lines
