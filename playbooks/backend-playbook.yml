@@ -1,0 +1,81 @@
+---
+- hosts: swarm_manager
+  become: yes
+
+  vars:
+    docker_host: "unix:///var/run/docker.sock"
+
+  vars_files:
+    - ../env.yml
+
+  pre_tasks:
+    - name: Update APT package index
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Make sure the python3-apt package is installed
+      ansible.builtin.apt:
+        name: python3-apt
+        state: present
+
+    - name: Make sure the python3-venv package is installed
+      ansible.builtin.apt:
+        name: python3-venv
+        state: present
+
+    - name: Make sure the python3-pip package is installed
+      ansible.builtin.apt:
+        name: python3-pip
+        state: present
+
+    - name: Create a virtual environment for Python
+      ansible.builtin.command:
+        cmd: python3 -m venv /opt/esm2_env
+        creates: /opt/esm2_env/bin/activate
+
+    - name: Install Docker SDK for Python and jsondiff in virtual environment
+      ansible.builtin.pip:
+        name:
+          - docker
+          - jsondiff
+        virtualenv: /opt/esm2_env
+
+    - name: Define Python interpreter
+      set_fact:
+        ansible_python_interpreter: /opt/esm2_env/bin/python
+
+  tasks:
+    - name: Generate backend Docker Swarm file (esm2)
+      template:
+        src: ../stacks/esm2/backend/templates/backend.template.yml.j2
+        dest: ../stacks/esm2/backend/docker-compose-backend.yml
+
+    - name: Create certs directory
+      ansible.builtin.file:
+        path: ../stacks/esm2/backend/certs
+        state: directory
+        mode: '0755'
+
+    - name: Create storage directory
+      ansible.builtin.file:
+        path: ../stacks/esm2/backend/storage
+        state: directory
+        mode: '0755'
+
+    - name: Deploy the backend stack (esm2)
+      community.docker.docker_stack:
+        name: esm2
+        state: present
+        with_registry_auth: yes
+        compose:
+          - ../stacks/esm2/backend/docker-compose-backend.yml
+
+#    - name: Verify that the backend service is running
+#      command: docker stack ps esm2 --filter "name=esm2_backend"
+#      register: backend_result
+#      changed_when: false
+#
+#    - name: Show backend service status
+#      debug:
+#        var: backend_result.stdout_lines
+

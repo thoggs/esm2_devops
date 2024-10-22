@@ -1,0 +1,23 @@
+---
+- hosts: swarm_manager
+  become: yes
+
+  vars:
+    docker_host: "unix:///var/run/docker.sock"
+
+  vars_files:
+    - ../env.yml
+
+  pre_tasks:
+    - name: Update APT package index
+      ansible.builtin.apt:
+        update_cache: yes
+
+  tasks:
+    - name: Deploy the database service (esm2)
+      community.docker.docker_stack:
+        name: esm2
+        state: present
+        with_registry_auth: yes
+        compose:
+          - ../stacks/esm2/db/docker-compose-db.yml

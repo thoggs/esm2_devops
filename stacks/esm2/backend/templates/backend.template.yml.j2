@@ -1,0 +1,93 @@
+services:
+  backend:
+    image: "{{ DOCKER_REGISTRY_URL }}/{{ BACK_IMAGE_NAME }}:{{ TAG_NAME }}"
+    environment:
+      ENABLE_SSL_FILE: /run/secrets/ENABLE_SSL
+      KEY_STORE_LOCATION_FILE: /run/secrets/KEY_STORE_LOCATION
+      KEY_STORE_PASSWORD_FILE: /run/secrets/KEY_STORE_PASSWORD
+      UPLOAD_BASEPATH_FILE: /run/secrets/UPLOAD_BASEPATH
+      UPLOAD_BASEURI_FILE: /run/secrets/UPLOAD_BASEURI
+      FHIR_AUTH_URL_FILE: /run/secrets/FHIR_AUTH_URL
+      FHIR_URL_FILE: /run/secrets/FHIR_URL
+      FHIR_INTEGRATION_USER_FILE: /run/secrets/FHIR_INTEGRATION_USER
+      DB_USER_FILE: /run/secrets/DB_USER
+      DB_PASSWORD_FILE: /run/secrets/DB_PASSWORD
+      DB_ESM_FILE: /run/secrets/DB_ESM
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    secrets:
+      - FHIR_INTEGRATION_USER
+      - DB_USER
+      - DB_PASSWORD
+      - DB_ESM
+      - ENABLE_SSL
+      - KEY_STORE_PASSWORD
+      - KEY_STORE_LOCATION
+      - UPLOAD_BASEPATH
+      - UPLOAD_BASEURI
+      - FHIR_AUTH_URL
+      - FHIR_URL
+    volumes:
+      - ./certs:/app/keystore
+      - ./storage:/app/storage
+    networks:
+      - sm_network
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        monitor: 60s
+        max_failure_ratio: 0.3
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        monitor: 60s
+    healthcheck:
+      test: [ "CMD", "curl", "--insecure", "--fail", "--location", "https://localhost:8443/api/v1/health-check" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  sm_network:
+    external: true
+
+secrets:
+  FHIR_INTEGRATION_USER:
+    external: true
+  DB_ESM:
+    external: true
+  DB_USER:
+    external: true
+  DB_PASSWORD:
+    external: true
+  ENABLE_SSL:
+    external: true
+  KEY_STORE_PASSWORD:
+    external: true
+  KEY_STORE_LOCATION:
+    external: true
+  UPLOAD_BASEPATH:
+    external: true
+  UPLOAD_BASEURI:
+    external: true
+  FHIR_AUTH_URL:
+    external: true
+  FHIR_URL:
+    external: true

@@ -1,20 +1,107 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# ESM2 Infrastructure Project
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+This project sets up a Docker Swarm infrastructure for the ESM2 project, including services for backend, frontend,
+monitoring, and a PostgreSQL database. The project uses Ansible to automate the deployment and configuration of these
+services.
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+## Project Structure
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+```bash
+├── inventories/          # Inventory files for Ansible
+│   └── hosts.ini         # Host definitions for Ansible playbooks
+├── playbooks/            # Ansible playbooks to deploy different parts of the stack
+│   ├── backend-playbook.yml
+│   ├── check-stack-status.yml
+│   ├── db-playbook.yml
+│   ├── docker-playbook.yml
+│   ├── esm2-playbook.yml
+│   ├── frontend-playbook.yml
+│   ├── monitoring-playbook.yml
+│   └── populate-db-playbook.yml
+├── stacks/               # Docker stack definitions for different services
+│   ├── esm2/
+│   │   ├── backend/      # Backend service configuration
+│   │   ├── db/           # Database service configuration and SQL scripts
+│   │   └── frontend/     # Frontend service configuration
+│   └── monitoring/       # Monitoring services (Grafana, Prometheus, etc.)
+│       ├── blackbox/
+│       ├── grafana/
+│       ├── loki/
+│       ├── opentelemetry/
+│       ├── prometheus/
+│       ├── promtail/
+│       └── docker-compose-monitoring.yml
+├── vars/                 # Variable definitions and secrets for Ansible
+│   └── secrets/
+│       └── create-secrets.yml
+├── env.yml               # Environment variables for the Ansible playbooks
+└── README.md             # Project documentation
+```
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+## Installation
+
+### Install Ansible
+
+To install Ansible on your machine, run the following commands:
+
+```bash
+sudo apt update && sudo apt install -y python3-pip
+```
+
+```bash
+python3 -m pip install --user ansible --break-system-packages
+```
+
+### Update Ansible
+
+To update your Ansible version, use this command:
+
+```bash
+python3 -m pip install --upgrade --user ansible --break-system-packages
+```
+
+### Add Ansible to PATH
+
+Make sure Ansible is available in your terminal by adding it to your PATH:
+
+```bash
+echo 'export PATH=$PATH:$HOME/.local/bin' >> ~/.bashrc
+```
+
+```bash
+source ~/.bashrc
+```
+
+## Running the Playbooks
+
+### Running the Full ESM2 Playbook
+
+To run the complete setup of the ESM2 infrastructure, use the following command:
+
+```bash
+ansible-playbook -i inventories/hosts.ini playbooks/esm2-playbook.yml
+```
+
+### Running Playbook with Specific Tags
+
+If you want to run only a specific part of the setup, you can use tags. For example, to run only the backend playbook:
+
+```bash
+ansible-playbook -i inventories/hosts.ini playbooks/esm2-playbook.yml --tags "backend"
+```
+
+### Playbook Tags
+
+Each part of the infrastructure is tagged to allow selective execution:
+
+- `docker`: For Docker installation and setup.
+- `db`: For setting up the PostgreSQL database.
+- `backend`: For deploying the backend services.
+- `frontend`: For deploying the frontend services.
+- `monitoring`: For setting up monitoring tools like Grafana, Prometheus, etc.
+- `populate-db`: For populating the database with initial data.
+- `check-status`: For verifying the status of the deployed services.
+
+## License
+
+This project is licensed under the Siemens License.
