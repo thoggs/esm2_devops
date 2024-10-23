@@ -16,7 +16,7 @@
   tasks:
     - name: Generate frontend Docker Swarm file (esm2)
       template:
-        src: ../stacks/esm2/frontend/templates/frontend.template.j2
+        src: ../stacks/esm2/frontend/templates/frontend.template.yml.j2
         dest: ../stacks/esm2/frontend/docker-compose-frontend.yml
 
     - name: Deploy the frontend stack (esm2)
