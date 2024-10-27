@@ -23,20 +23,30 @@
         src: ../stacks/monitoring/grafana/templates/grafana-datasources.template.yml.j2
         dest: ../stacks/monitoring/grafana/datasources.yml
 
-    - name: Create Prometheus data volume
-      community.docker.docker_volume:
-        name: prometheus_data
-        state: present
+    - name: Generate Grafana.ini configuration file
+      template:
+        src: ../stacks/monitoring/grafana/templates/grafana.ini.template.j2
+        dest: ../stacks/monitoring/grafana/grafana.ini
 
-    - name: Create Grafana storage volume
-      community.docker.docker_volume:
-        name: grafana_storage
-        state: present
+    - name: Generate docker composer configuration file
+      template:
+        src: ../stacks/monitoring/templates/docker-compose-monitoring.template.yml.j2
+        dest: ../stacks/monitoring/docker-compose-monitoring.yml
 
-    - name: Create Portainer data volume
-      community.docker.docker_volume:
-        name: portainer_data
-        state: present
+ #   - name: Create Prometheus data volume
+ #     community.docker.docker_volume:
+  #      name: prometheus_data
+ #       state: present
+
+ #   - name: Create Grafana storage volume
+ #     community.docker.docker_volume:
+ #       name: grafana_storage
+ #       state: present
+
+ #   - name: Create Portainer data volume
+ #     community.docker.docker_volume:
+ #       name: portainer_data
+ #       state: present
 
   tasks:
     - name: Deploy the Monitoring stack (monitoring)

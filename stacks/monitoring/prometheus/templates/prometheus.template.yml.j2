@@ -1,23 +1,42 @@
 global:
-  scrape_interval: 15s
+  scrape_interval: 15s    
+  evaluation_interval: 15s
+  scrape_timeout: 10s 
   external_labels:
-    monitor: 'codelab-monitor'
+    service_group: 'containers'
+    cluster: 'DockerSwarm'
+    monitor: 'ms-monitor'
+
+alerting:
+  alertmanagers:
+    - dns_sd_configs:
+        - names:
+            - 'tasks.alertmanager'
+          type: 'A'
+          port: 9093
+
+rule_files:
+- '/etc/prometheus/alert.rules.yml'
 
 scrape_configs:
   - job_name: 'prometheus'
     scrape_interval: 5s
-    static_configs:
-      - targets: [ 'localhost:9090' ]
+    dns_sd_configs:
+      - names:
+          - 'tasks.prometheus'
+        type: 'A'
+        port: 9090
     basic_auth:
       username: '{{ PROMETHEUS_USER }}'
-      password: '{{ PROMETHEUS_PASSWORD }}'
-
+      password: '{{ PROMETHEUS_PASSWORD }}'  
+      
   - job_name: 'cadvisor'
     dns_sd_configs:
       - names:
           - 'tasks.cadvisor'
         type: 'A'
         port: 8080
+    scrape_interval: 10s
 
   - job_name: 'node_exporter'
     dns_sd_configs:
@@ -25,18 +44,64 @@ scrape_configs:
           - 'tasks.node_exporter'
         type: 'A'
         port: 9100
+    scrape_interval: 10s
 
   - job_name: 'api-health-check'
     metrics_path: '/probe'
     params:
-      module: [ http_2xx ]
-    scrape_interval: 5s
+      module: [http_2xx]
+    scrape_interval: 30s
     static_configs:
-      - targets: [ '{{ PROMETHEUS_API_HEALTH_CHECK_URL }}' ]
+      - targets:
+          - '{{ PROMETHEUS_API_HEALTH_CHECK_URL }}'
+          - '{{ PROMETHEUS_API_HEALTH_CHECK_URL_BACK }}'
     relabel_configs:
-      - source_labels: [ _address_ ]
+      - source_labels: [__address__]
         target_label: __param_target
-      - source_labels: [ __param_target ]
+      - source_labels: [__param_target]
         target_label: instance
-      - target_label: _address_
-        replacement: blackbox_exporter:9115
+      - target_label: __address__
+        replacement: 'blackbox_exporter:9115'
+
+  - job_name: 'postgresql'
+    dns_sd_configs:
+      - names:
+          - 'tasks.postgres_exporter'
+        type: 'A'
+        port: 9187
+    scrape_interval: 30s
+    scrape_timeout: 10s 
+
+  - job_name: 'alertmanager'
+    dns_sd_configs:
+      - names:
+          - 'tasks.alertmanager'
+        type: 'A'
+        port: 9093
+    scrape_interval: 10s
+    
+  - job_name: 'loki'
+    dns_sd_configs:
+      - names:
+          - 'tasks.loki'
+        type: 'A'
+        port: 3100
+    scrape_interval: 10s
+    
+  - job_name: 'opentelemetry'
+    honor_timestamps: true
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    dns_sd_configs:
+    - names:
+        - 'tasks.opentelemetry'
+      type: 'A'
+      port: 8889
+
+  - job_name: 'promtail'
+    dns_sd_configs:
+      - names:
+          - 'tasks.promtail'
+        type: 'A'
+        port: 9080
+    scrape_interval: 10s
