@@ -1,0 +1,5 @@
+- targets:
+    - "{container_name=~'.+'}"
+  labels:
+    job: dockerlogs
+    __path__: /var/lib/docker/containers/*/*/*log

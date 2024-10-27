@@ -5,9 +5,20 @@ datasources:
     type: prometheus
     access: proxy
     url: {{ PROMETHEUS_URL }}
-    isDefault: true
-
+    editable: true
+    
   - name: Loki
     type: loki
     access: proxy
     url: {{ LOKI_URL }}
+    editable: true
+ 
+  - name: alertmanager
+    type: alertmanager
+    access: proxy
+    url: {{ ALERTMANAGER_URL }}
+    jsonData:
+      implementation: 'prometheus'
+    editable: true
+
+

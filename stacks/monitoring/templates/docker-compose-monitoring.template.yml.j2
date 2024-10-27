@@ -6,18 +6,19 @@ services:
     configs:
       - source: prometheus_config
         target: /etc/prometheus/prometheus.yml
+      - source: prometheus_rules
+        target: /etc/prometheus/alert.rules.yml
+    volumes:
+      - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.retention.time=15d'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
     networks:
-      - monitoring_network
+      - network
     labels:
       - "com.example.service=prometheus"
-    healthcheck:
-      test: [ "CMD", "wget", "-q", "--tries=1", "--spider", "http://localhost:9090/-/healthy" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
     deploy:
       mode: replicated
       replicas: 1
@@ -39,18 +40,19 @@ services:
           memory: 500M
 
   loki:
-    image: grafana/loki:latest
-    ports:
-      - "3100:3100"
+    image: grafana/loki:3.1.2
+    #ports:
+    #  - "3100:3100"
     configs:
       - source: loki_config
         target: /etc/loki/local-config.yml
     volumes:
-      - loki_data:/stacks/esm2/logging/loki
+      - loki_data:/loki
     command:
       - '-config.file=/etc/loki/local-config.yml'
+      - "-config.expand-env=true"
     networks:
-      - monitoring_network
+      - network
     labels:
       - "com.example.service=loki"
     deploy:
@@ -74,14 +76,22 @@ services:
           memory: 1G
 
   promtail:
-    image: grafana/promtail:latest
+    image: grafana/promtail:3.1.2
     configs:
       - source: promtail_config
         target: /etc/promtail/config.yml
+      - source: promtail_targets
+        target: /etc/promtail/promtail-targets.yml
     command:
       - '-config.file=/etc/promtail/config.yml'
+    #ports:
+    #  - "9080:9080"
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - promtail-positions:/tmp
     networks:
-      - monitoring_network
+      - network
     labels:
       - "com.example.service=promtail"
     deploy:
@@ -100,27 +110,44 @@ services:
           memory: 256M
 
   grafana:
-    image: grafana/grafana-enterprise:latest
+    image: grafana/grafana-enterprise:11.2.2
     ports:
-      - "3000:3000"
+      - "443:443"
+      - "3000:443"
     configs:
       - source: grafana_ini
         target: /etc/grafana/grafana.ini
       - source: grafana_datasources
         target: /etc/grafana/provisioning/datasources/datasources.yml
+      - source: grafana_dashboards_provider
+        target: /etc/grafana/provisioning/dashboards/automatic.yml
+      - source: grafana_dashboard_1
+        target: /var/lib/grafana/dashboards/dashboard1.json
+      - source: grafana_dashboard_2
+        target: /var/lib/grafana/dashboards/dashboard2.json
+      - source: grafana_dashboard_3
+        target: /var/lib/grafana/dashboards/dashboard3.json
+      - source: grafana_dashboard_4
+        target: /var/lib/grafana/dashboards/dashboard4.json
+      - source: grafana_dashboard_5
+        target: /var/lib/grafana/dashboards/dashboard5.json
     volumes:
       - grafana_storage:/var/lib/grafana
+      - { { CERT_PATH } }
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/GRAFANA_ADMIN_PASSWORD
       - PROMETHEUS_URL_FILE=/run/secrets/PROMETHEUS_URL
       - LOKI_URL_FILE=/run/secrets/LOKI_URL
+      - GF_SERVER_PROTOCOL=https
+      - GF_SERVER_CERT_FILE={{ CERT_FILE_PATH }}
+      - GF_SERVER_CERT_KEY={{ CERT_KEY_PATH }}
     secrets:
       - GRAFANA_ADMIN_PASSWORD
       - PROMETHEUS_URL
       - LOKI_URL
     networks:
-      - monitoring_network
+      - network
     labels:
       - "com.example.service=grafana"
     deploy:
@@ -149,11 +176,12 @@ services:
       - source: otel_config
         target: /etc/otel-config.yml
     command: [ "--config=/etc/otel-config.yml" ]
-    ports:
-      - "4317:4317"
-      - "4318:4318"
+    #ports:
+    #  - "4317:4317"
+    #  - "4318:4318"
+    #  - "8889:8889"
     networks:
-      - monitoring_network
+      - network
     labels:
       - "com.example.service=opentelemetry"
     deploy:
@@ -174,17 +202,26 @@ services:
           memory: 512M
 
   portainer:
-    image: portainer/portainer-ce:latest
+    image: portainer/portainer-ce:2.23.0
     ports:
       - "9443:9443"
-      - "8000:8000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - portainer_data:/data
+      - { { CERT_PATH } }
+    command:
+      - --sslcert
+      - {{ CERT_FILE_PATH }}
+      - --sslkey
+      - {{ CERT_KEY_PATH }}
+      - --admin-password-file
+      - /run/secrets/PORTAINER_PASSWORD
     networks:
-      - monitoring_network
+      - network
     labels:
       - "com.example.service=portainer"
+    secrets:
+      - PORTAINER_PASSWORD
     deploy:
       mode: replicated
       replicas: 1
@@ -206,16 +243,16 @@ services:
           memory: 500M
 
   blackbox_exporter:
-    image: prom/blackbox-exporter:latest
+    image: prom/blackbox-exporter:v0.25.0
     configs:
       - source: blackbox_config
         target: /config/blackbox.yml
     command:
       - '--config.file=/config/blackbox.yml'
-    ports:
-      - "9115:9115"
+    #ports:
+    #  - "9115:9115"
     networks:
-      - monitoring_network
+      - network
     deploy:
       mode: replicated
       replicas: 1
@@ -235,8 +272,6 @@ services:
 
   node_exporter:
     image: prom/node-exporter:v1.8.2
-    ports:
-      - "9100:9100"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -245,6 +280,12 @@ services:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--collector.filesystem'
+      - '--collector.diskstats'
+    #ports:
+    #  - "9100:9100"
+    networks:
+      - network
     deploy:
       mode: global
       update_config:
@@ -254,18 +295,18 @@ services:
         limits:
           cpus: '0.1'
           memory: 128M
-    networks:
-      - monitoring_network
 
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.39.3
-    ports:
-      - "8081:8080"
+    image: gcr.io/cadvisor/cadvisor:latest
+    #ports:
+    #  - "8081:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:rw
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - network
     deploy:
       mode: global
       update_config:
@@ -275,11 +316,56 @@ services:
         limits:
           cpus: '0.1'
           memory: 128M
+
+  postgres_exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    environment:
+      - DATA_SOURCE_URI=10.105.0.4:5432/postgres?sslmode=disable&pool_max_conns=5
+      - SCRAPE_TIMEOUT=10s
+      - DATA_SOURCE_USER_FILE=/run/secrets/POSTGRES_USER
+      - DATA_SOURCE_PASS_FILE=/run/secrets/POSTGRES_PASSWORD
+    #ports:
+    #  - "9187:9187"
     networks:
-      - monitoring_network
+      - network
+    secrets:
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    #ports:
+    #  - "9093:9093"
+    volumes:
+      - alertmanager_data:/etc/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    networks:
+      - network
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 128M
 
 networks:
-  monitoring_network:
+  network:
     driver: overlay
     attachable: true
 
@@ -287,15 +373,21 @@ volumes:
   prometheus_data:
   grafana_storage:
   portainer_data:
+  alertmanager_data:
   loki_data:
+  promtail-positions:
 
 configs:
   prometheus_config:
     file: ./prometheus/prometheus.yml
+  prometheus_rules:
+    file: ./prometheus/alert.rules.yml
   loki_config:
     file: ./loki/loki-config.yml
   promtail_config:
     file: ./promtail/promtail-config.yml
+  promtail_targets:
+    file: ./promtail/promtail-targets.yml
   grafana_ini:
     file: ./grafana/grafana.ini
   grafana_datasources:
@@ -304,6 +396,20 @@ configs:
     file: ./opentelemetry/otel-config.yml
   blackbox_config:
     file: ./blackbox/blackbox.yml
+  alertmanager_config:
+    file: ./alertmanager/alertmanager.yml
+  grafana_dashboards_provider:
+    file: ./grafana/provisioning/dashboards/automatic.yml
+  grafana_dashboard_1:
+    file: ./grafana/dashbord1.json
+  grafana_dashboard_2:
+    file: ./grafana/dashbord2.json
+  grafana_dashboard_3:
+    file: ./grafana/dashbord3.json
+  grafana_dashboard_4:
+    file: ./grafana/dashbord4.json
+  grafana_dashboard_5:
+    file: ./grafana/dashbord5.json
 
 secrets:
   GRAFANA_ADMIN_PASSWORD:
@@ -317,4 +423,10 @@ secrets:
   PROMETHEUS_PASSWORD:
     external: true
   PROMETHEUS_API_HEALTH_CHECK_URL:
+    external: true
+  POSTGRES_USER:
+    external: true
+  POSTGRES_PASSWORD:
+    external: true
+  PORTAINER_PASSWORD:
     external: true
