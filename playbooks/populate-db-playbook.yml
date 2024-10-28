@@ -15,6 +15,17 @@
       command: "docker service ps {{ db_service_name }} --filter 'desired-state=running' -q"
       register: task_id
       changed_when: false
+      retries: 10
+      delay: 10
+      until: task_id.stdout != ""
+
+    - name: Wait for backend service to be ready
+      command: "docker service ps {{ backend_service_name }} --filter 'desired-state=running' -q"
+      register: backend_task_id
+      changed_when: false
+      retries: 10
+      delay: 10
+      until: backend_task_id.stdout != ""
 
     - name: Get the container ID for the backend service
       command: docker ps --filter "name={{ backend_service_name }}" --format "{{'{{.ID}}'}}"
