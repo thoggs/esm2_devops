@@ -17,6 +17,7 @@
     - name: Purge Docker packages completely
       ansible.builtin.command:
         cmd: sudo apt purge docker-ce docker-ce-cli containerd.io docker-compose-plugin -y
+      ignore_errors: yes
 
     - name: Remove Docker's storage directories
       ansible.builtin.command:
