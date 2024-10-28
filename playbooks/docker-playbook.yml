@@ -51,6 +51,10 @@
         update_cache: yes
         state: present
 
+    - name: Update APT package index
+      ansible.builtin.apt:
+        update_cache: yes
+
     - name: Install Docker
       ansible.builtin.apt:
         name:
